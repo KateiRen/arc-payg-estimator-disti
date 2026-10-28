@@ -64,13 +64,11 @@ flowchart TD
     WORKLOAD --> DIST_AZURE_COST
     D_INCENTIVES --> DIST_MCI["MCI Core + Growth Accelerator<br/>on distributor Azure cost"]
     DIST_AZURE_COST --> DIST_MCI
-    DIST_SPLA_INCENTIVE --> DIST_SPLA_LOSS["Lost SPLA incentive"]
     DCO_CONFIG --> DIST_DCO["Retained DCO<br/>DCO less pass-along share"]
     DIST_AZURE_COST --> DIST_DCO
-    DIST_AZURE_REVENUE --> DIST_AZURE_CONTRIBUTION["Azure economic contribution<br/>Revenue - cost + MCI + Growth<br/>+ retained DCO - lost SPLA incentive"]
+    DIST_AZURE_REVENUE --> DIST_AZURE_CONTRIBUTION["Azure economic contribution<br/>Revenue - cost + MCI + Growth<br/>+ retained DCO<br/>SPLA incentive impact = 0"]
     DIST_AZURE_COST --> DIST_AZURE_CONTRIBUTION
     DIST_MCI --> DIST_AZURE_CONTRIBUTION
-    DIST_SPLA_LOSS --> DIST_AZURE_CONTRIBUTION
     DIST_DCO --> DIST_AZURE_CONTRIBUTION
 
     DIST_SPLA_CONTRIBUTION --> DIST_GROWTH["Economic impact growth<br/>(Azure contribution - SPLA contribution)<br/>/ |SPLA contribution| x 100"]

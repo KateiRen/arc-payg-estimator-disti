@@ -4,8 +4,43 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const P = require('../site/pricing.js');
 const U = require('../scripts/fetch-prices.js');
+
+test('distributor Azure PAYG has zero SPLA incentive impact without reducing contribution', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../site/index.html'), 'utf8');
+  const render = html.split('\n').find(line => line.startsWith('function renderDistributorBusiness()'));
+  assert.ok(render);
+  for (const splaIncentive of [0, 5, 20]) {
+    for (const hasDco of [false, true]) {
+      const elements = {};
+      let chartValues;
+      const context = {
+        $: id => elements[id] ||= {},
+        currency: value => value,
+        state: { sql: { currency: 'EUR', rows: [{}] }, windows: { rows: [] } },
+        storedPrices: () => ({ splaListEntered: true, resellerPaygEntered: true }),
+        distributorRowEconomics: () => ({
+          splaRevenue: 120, splaCost: 100, azureRevenue: 160, azureCost: 100,
+        }),
+        dcoSettings: { splaIncentive, mci: 3, growth: 12, hasDco, dcoRate: 10, passDco: true, dcoShare: 25 },
+        drawDistributorBusinessChart: values => { chartValues = Array.from(values); },
+      };
+      vm.runInNewContext(`${render}\nrenderDistributorBusiness();`, context);
+      const expectedSpla = 240 + 1200 * splaIncentive / 100;
+      const expectedAzure = 720 + 36 + 144 + (hasDco ? 90 : 0);
+      assert.strictEqual(elements.distSplaLoss.textContent, 0);
+      assert.strictEqual(elements.distSplaIncentiveValue.textContent, 1200 * splaIncentive / 100);
+      assert.strictEqual(elements.distSplaContribution.textContent, expectedSpla);
+      assert.strictEqual(elements.distAzureContribution.textContent, expectedAzure);
+      assert.deepStrictEqual(chartValues, [1440, expectedSpla, 1920, expectedAzure]);
+      const growth = (expectedAzure - expectedSpla) / Math.abs(expectedSpla) * 100;
+      assert.strictEqual(elements.distEconomicImpactGrowth.textContent,
+        `+${growth.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
+    }
+  }
+});
 
 const item = (over) => Object.assign({
   currencyCode: 'USD', unitPrice: 0.1, location: 'Global', meterName: 'm', productName: 'p',
@@ -259,7 +294,8 @@ test('published estimator uses workflow pricing and offers an offline copy', () 
   assert.doesNotMatch(html, /azureRevenue:paygC\*hours\*p\['resellerPayg'\+paygIdx\]\*\(1-PEC_RATE\)/);
   assert.match(html, /azureCost:paygC\*hours\*p\['payg'\+paygIdx\]\*\(1-PEC_RATE\)/);
   assert.match(html, /splaContribution=splaBaseGrossProfit\+splaIncentive/);
-  assert.match(html, /azureContribution=azureBaseGrossProfit-splaIncentive\+mci\+growth\+retainedDco/);
+  assert.match(html, /azureContribution=azureBaseGrossProfit\+mci\+growth\+retainedDco/);
+  assert.match(html, /show\('distSplaLoss',0\)/);
   assert.match(html, /id="distEconomicImpactGrowth"/);
   assert.match(html, /economicImpactGrowth=splaContribution===0\?null:\(azureContribution-splaContribution\)\/Math\.abs\(splaContribution\)\*100/);
   assert.match(html, /economicImpactGrowth===null\?'Not available'/);
