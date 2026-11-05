@@ -11,6 +11,7 @@ const U = require('../scripts/fetch-prices.js');
 test('distributor Azure PAYG has zero SPLA incentive impact without reducing contribution', () => {
   const html = fs.readFileSync(path.join(__dirname, '../site/index.html'), 'utf8');
   const render = html.split('\n').find(line => line.startsWith('function renderDistributorBusiness()'));
+  const hasWorkloads = html.split('\n').find(line => line.startsWith('function hasWorkloads('));
   assert.ok(render);
   for (const splaIncentive of [0, 5, 20]) {
     for (const hasDco of [false, true]) {
@@ -27,7 +28,7 @@ test('distributor Azure PAYG has zero SPLA incentive impact without reducing con
         dcoSettings: { splaIncentive, mci: 3, growth: 12, hasDco, dcoRate: 10, passDco: true, dcoShare: 25 },
         drawDistributorBusinessChart: values => { chartValues = Array.from(values); },
       };
-      vm.runInNewContext(`${render}\nrenderDistributorBusiness();`, context);
+      vm.runInNewContext(`${hasWorkloads}\n${render}\nrenderDistributorBusiness();`, context);
       const expectedSpla = 240 + 1200 * splaIncentive / 100;
       const expectedAzure = 720 + 36 + 144 + (hasDco ? 90 : 0);
       assert.strictEqual(elements.distSplaLoss.textContent, 0);
@@ -39,6 +40,114 @@ test('distributor Azure PAYG has zero SPLA incentive impact without reducing con
       assert.strictEqual(elements.distEconomicImpactGrowth.textContent,
         `+${growth.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
     }
+  }
+});
+
+function estimatorHarness() {
+  const html = fs.readFileSync(path.join(__dirname, '../site/index.html'), 'utf8');
+  const elements = {};
+  const element = id => elements[id] ||= {
+    style: {}, value: '', classList: { toggle() {} }, add() {},
+  };
+  const context = vm.createContext({
+    document: {
+      getElementById: element,
+      querySelectorAll: () => [],
+      querySelector: element,
+    },
+    localStorage: { getItem: () => null },
+    location: { hostname: 'localhost', protocol: 'http:' },
+    Option: function () {},
+  });
+  vm.runInContext(html.split('<script>')[1].split('</script>')[0], context);
+  return { elements, run: source => vm.runInContext(source, context) };
+}
+
+test('distributor business case requires prices only for active products', () => {
+  for (const activeProduct of ['sql', 'windows']) {
+    for (const inactiveRows of [[], [{ edition: 'Standard', qty: 0, cores: 8, uptime: '7x24' }]]) {
+      const { elements, run } = estimatorHarness();
+      const inactiveProduct = activeProduct === 'sql' ? 'windows' : 'sql';
+      run(`
+        state.${activeProduct}.rows=[{edition:'Standard',qty:1,cores:8,uptime:'7x24'}];
+        state.${inactiveProduct}.rows=${JSON.stringify(inactiveRows)};
+        custom['${activeProduct}:EUR']={
+          ...custom['${activeProduct}:EUR'],
+          spla1:20,spla2:20,splaList1:10,splaList2:10,
+          resellerPayg1:0.2,resellerPayg2:0.2,
+          splaEntered:true,splaListEntered:true,resellerPaygEntered:true
+        };
+        currency=value=>value;
+        renderDistributorBusiness();
+      `);
+      assert.strictEqual(elements.distBusinessWarning.hidden, true);
+      assert.strictEqual(elements.distBusinessWarning.textContent, '');
+      assert.strictEqual(elements.distSplaRevenue.textContent, 960);
+      assert.strictEqual(elements.distSplaCost.textContent, 480);
+      assert.strictEqual(elements.distAzureRevenue.textContent, 8 * 730 * 0.2 * 12);
+
+      for (const flag of ['splaListEntered', 'resellerPaygEntered']) {
+        run(`custom['${activeProduct}:EUR'].${flag}=false;renderDistributorBusiness();`);
+        assert.strictEqual(elements.distBusinessWarning.hidden, false);
+        assert.strictEqual(elements.distSplaRevenue.textContent, 0);
+        assert.strictEqual(elements.distEconomicImpactGrowth.textContent, 'Not available');
+        run(`custom['${activeProduct}:EUR'].${flag}=true;`);
+      }
+
+      run(`state.${inactiveProduct}.rows=[{edition:'Standard',qty:1,cores:8,uptime:'7x24'}];renderDistributorBusiness();`);
+      assert.strictEqual(elements.distBusinessWarning.hidden, false);
+    }
+  }
+});
+
+test('empty workloads produce zero distributor totals without missing-price warnings', () => {
+  const { elements, run } = estimatorHarness();
+  run(`
+    state.sql.rows=[];
+    state.windows.rows=[];
+    currency=value=>value;
+    renderDistributorBusiness();
+  `);
+  assert.strictEqual(elements.distBusinessWarning.hidden, true);
+  for (const id of ['distSplaRevenue', 'distAzureRevenue', 'distSplaContribution', 'distAzureContribution']) {
+    assert.strictEqual(elements[id].textContent, 0);
+  }
+  assert.strictEqual(elements.distEconomicImpactGrowth.textContent, 'Not available');
+});
+
+test('comparison warnings refresh when workloads are added, removed, or quantities change', () => {
+  for (const product of ['sql', 'windows']) {
+    const { elements, run } = estimatorHarness();
+    run(`pane='${product}';state[pane].rows=[];render();`);
+    assert.strictEqual(elements.splaWarning.hidden, true);
+    assert.strictEqual(elements.splaWarning.textContent, '');
+
+    elements.addRow.onclick();
+    assert.strictEqual(elements.splaWarning.hidden, false);
+    assert.match(elements.splaWarning.textContent, /reseller SPLA prices and reseller Azure PAYG prices/);
+
+    if (product === 'windows') {
+      const change = (field, value) => elements.workloads.onchange({
+        target: { dataset: { i: '0' }, value, classList: { contains: name => name === field } },
+      });
+      change('qty', '0');
+      assert.strictEqual(elements.splaWarning.hidden, true);
+      assert.strictEqual(elements.splaWarning.textContent, '');
+      change('qty', '1');
+      assert.strictEqual(elements.splaWarning.hidden, false);
+      change('cores', '0');
+      assert.strictEqual(elements.splaWarning.hidden, false);
+      assert.strictEqual(run('rowCosts(state.windows.rows[0]).splaC'), 8);
+      assert.strictEqual(run('rowCosts(state.windows.rows[0]).paygC'), 1);
+      run('renderDistributorBusiness();');
+      assert.strictEqual(elements.distBusinessWarning.hidden, false);
+    }
+
+    elements.workloads.onclick({
+      target: { dataset: { i: '0' }, classList: { contains: name => name === 'del' } },
+    });
+    assert.strictEqual(elements.splaWarning.hidden, true);
+    assert.strictEqual(elements.splaWarning.textContent, '');
   }
 });
 

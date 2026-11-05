@@ -14,6 +14,11 @@ browser storage and exported project JSON files, but are never embedded in a
 hosted or offline HTML copy. Project names and configured workloads are retained
 only in exported project JSON files.
 
+Missing-price warnings apply only to products with active workloads. Zero VM
+quantities or no workload rows do not require prices for that product or block
+the other product's distributor business case. A positive VM quantity with zero
+entered cores still applies the existing licensing minimums and requires prices.
+
 ## Price refresh and deployment
 
 The **Refresh estimator prices** GitHub Actions workflow:
