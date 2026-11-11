@@ -14,6 +14,15 @@ browser storage and exported project JSON files, but are never embedded in a
 hosted or offline HTML copy. Project names and configured workloads are retained
 only in exported project JSON files.
 
+## Printing
+
+The Print button and the browser's print command always include Instructions and
+SQL Server PAYG, plus Windows Server PAYG when at least one workload has a VM count
+greater than zero. The Distributor tab is never printed. Each sheet, including
+expanded incentive component details, is automatically scaled to one A4 portrait
+page. Large workload lists will use smaller text. The active tab and browser
+layout are unchanged after printing or cancelling.
+
 ## Price refresh and deployment
 
 The **Refresh estimator prices** GitHub Actions workflow:
@@ -58,3 +67,7 @@ npm test
 npm run fetch-prices
 python -m http.server --directory site 8000
 ```
+
+Print integration tests also run when `ARC_PRINT_BROWSER` points to a Chromium
+browser executable and Node.js 22+ is used. They verify PDF page counts, conditional
+Windows inclusion, and preservation of the browser layout, focus, and data.
