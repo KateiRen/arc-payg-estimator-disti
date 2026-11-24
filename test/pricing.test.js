@@ -116,6 +116,46 @@ test('empty workloads produce zero distributor totals without missing-price warn
   assert.strictEqual(elements.distEconomicImpactGrowth.textContent, 'Not available');
 });
 
+test('reseller price sections show the active product and currency rates used in comparisons', () => {
+  const { elements, run } = estimatorHarness();
+  run(`
+    custom['sql:EUR']={spla1:24,spla2:80,splaEntered:true,resellerPayg1:0.1234,resellerPayg2:0.4567};
+    custom['windows:EUR']={spla1:8,spla2:16,splaEntered:true,resellerPayg1:9,resellerPayg2:0.0567};
+    custom['sql:USD']={spla1:30,spla2:100,splaEntered:true,resellerPayg1:0.2345,resellerPayg2:0.5678};
+    currency=(value,c)=>c+':'+value;
+    pane='sql';render();
+  `);
+  assert.equal(elements.resellerPricesCurrency.textContent, 'EUR');
+  assert.match(elements.resellerPrices.innerHTML, /SQL Server Standard Core ALng LSA 2L.*EUR:24.*Two-core pack \/ month/);
+  assert.match(elements.resellerPrices.innerHTML, /SQL Server Enterprise Core ALng LSA 2L.*EUR:80/);
+  assert.match(elements.resellerPrices.innerHTML, /SQL Server Standard \(Azure PAYG\).*EUR:0\.1234.*Per core\/hour/);
+  assert.match(elements.resellerPrices.innerHTML, /SQL Server Enterprise \(Azure PAYG\).*EUR:0\.4567/);
+  assert.doesNotMatch(elements.resellerPrices.innerHTML, /Windows Server/);
+
+  run("pane='windows';render();");
+  assert.match(elements.resellerPrices.innerHTML, /Win Server Standard Core ALng LSA 2L.*EUR:8.*Two-core pack \/ month/);
+  assert.match(elements.resellerPrices.innerHTML, /Win Server DC Core ALng LSA 2L.*EUR:16/);
+  assert.match(elements.resellerPrices.innerHTML, /Windows Server \(Azure PAYG\).*EUR:0\.0567/);
+  assert.doesNotMatch(elements.resellerPrices.innerHTML, /SQL Server|EUR:9</);
+
+  run("pane='sql';state.sql.currency='USD';render();");
+  assert.equal(elements.resellerPricesCurrency.textContent, 'USD');
+  assert.match(elements.resellerPrices.innerHTML, /USD:30/);
+  assert.match(elements.resellerPrices.innerHTML, /USD:0\.2345/);
+  assert.doesNotMatch(elements.resellerPrices.innerHTML, /EUR:/);
+});
+
+test('reseller price sections do not substitute list prices for missing reseller rates', () => {
+  for (const product of ['sql', 'windows']) {
+    const { elements, run } = estimatorHarness();
+    run(`pane='${product}';render();`);
+    const count = product === 'sql' ? 4 : 3;
+    assert.equal((elements.resellerPrices.innerHTML.match(/Not entered/g) || []).length, count);
+    run(`custom['${product}:EUR'].spla1=100;custom['${product}:EUR'].spla2=200;render();`);
+    assert.equal((elements.resellerPrices.innerHTML.match(/Not entered/g) || []).length, count);
+  }
+});
+
 test('comparison warnings refresh when workloads are added, removed, or quantities change', () => {
   for (const product of ['sql', 'windows']) {
     const { elements, run } = estimatorHarness();

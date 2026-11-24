@@ -19,6 +19,12 @@ quantities or no workload rows do not require prices for that product or block
 the other product's distributor business case. A positive VM quantity with zero
 entered cores still applies the existing licensing minimums and requires prices.
 
+Both PAYG tabs have an **Effective reseller prices** section, collapsed by
+default. It shows the current product's full SPLA SKU names and monthly two-core
+pack prices, plus Azure PAYG per-core hourly rates in the selected
+currency, without PEC or incentive deductions. Missing rates show **Not entered**.
+The section is read-only; change prices on the Distributor tab.
+
 ## Printing
 
 The Print button and the browser's print command always include Instructions and

@@ -73,6 +73,7 @@ test('printing includes only the required sheets, fits each page, and preserves 
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   assert.equal(await evaluate("typeof preparePrintReport"), 'function');
+  assert.equal(await evaluate("$('resellerPricesDetails').open"), false);
   await evaluate("let stableStyle=document.createElement('style');stableStyle.textContent='*{caret-color:transparent!important;transition:none!important;animation:none!important}';document.head.append(stableStyle)");
   const screenState = `JSON.stringify({html:document.querySelector('.shell').outerHTML,focus:document.activeElement.outerHTML,x:scrollX,y:scrollY,state,storage:{...localStorage},
     layout:[...document.querySelectorAll('.shell *')].map(e=>{let r=e.getBoundingClientRect(),s=getComputedStyle(e);return[r.x,r.y,r.width,r.height,s.display,s.fontSize,s.color,s.backgroundColor]})})`;
@@ -92,6 +93,7 @@ test('printing includes only the required sheets, fits each page, and preserves 
               return content.scrollHeight*scale<=sheet.clientHeight+.1&&content.scrollWidth*scale<=sheet.clientWidth+.1}),
             privateData:!!document.querySelector('.print-report #pricingPane')||document.querySelector('.print-report').textContent.includes('Distributor business case'),
             details:[...document.querySelectorAll('.print-report details')].every(e=>e.open),
+            resellerPriceTitles:[...document.querySelectorAll('.print-report details summary')].filter(e=>e.textContent==='Effective reseller prices').length,
             controls:document.querySelectorAll('.print-report input,.print-report select,.print-report button').length})`);
         assert.deepEqual(report.titles, windowsCount
           ? ['Instructions', 'SQL Server PAYG - EUR', 'Windows Server PAYG - EUR']
@@ -99,6 +101,7 @@ test('printing includes only the required sheets, fits each page, and preserves 
         assert.equal(report.fits, true);
         assert.equal(report.privateData, false);
         assert.equal(report.details, true);
+        assert.equal(report.resellerPriceTitles, windowsCount ? 2 : 1);
         assert.equal(report.controls, 0);
         await evaluate('clearPrintReport()');
         const after = await evaluate(screenState);
